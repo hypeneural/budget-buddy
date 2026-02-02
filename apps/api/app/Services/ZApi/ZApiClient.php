@@ -142,7 +142,7 @@ class ZApiClient
     }
 
     /**
-     * Get QR code as base64 image
+     * Get QR code as base64 image (or detect if already connected)
      */
     public function getQrCodeImage(WhatsAppInstance $instance): array
     {
@@ -154,10 +154,116 @@ class ZApiClient
 
         $data = $response->json();
 
+        // Z-API returns {"connected": true} when already connected
+        if (isset($data['connected']) && $data['connected'] === true) {
+            return [
+                'connected' => true,
+                'imageBase64' => null,
+                'refreshedAt' => now()->toIso8601String(),
+            ];
+        }
+
         return [
+            'connected' => false,
             'imageBase64' => $data['value'] ?? null,
             'refreshedAt' => now()->toIso8601String(),
         ];
+    }
+
+    /**
+     * Get device/phone information when connected
+     */
+    public function getDeviceInfo(WhatsAppInstance $instance): array
+    {
+        $response = $this->client($instance)->get('/device');
+
+        if ($response->failed()) {
+            throw new \Exception("Z-API getDeviceInfo failed: {$response->body()}", $response->status());
+        }
+
+        $data = $response->json();
+
+        // Update instance with phone number if available
+        if (!empty($data['phone'])) {
+            $instance->update([
+                'phone_number' => $data['phone'],
+            ]);
+        }
+
+        return [
+            'phone' => $data['phone'] ?? null,
+            'imgUrl' => $data['imgUrl'] ?? null,
+            'name' => $data['name'] ?? null,
+            'retrievedAt' => now()->toIso8601String(),
+        ];
+    }
+
+    /**
+     * Get full status: combines status, device info, and QR code in single response
+     */
+    public function getFullStatus(WhatsAppInstance $instance): array
+    {
+        // First check connection status
+        $statusResponse = $this->client($instance)->get('/status');
+
+        if ($statusResponse->failed()) {
+            throw new \Exception("Z-API getStatus failed: {$statusResponse->body()}", $statusResponse->status());
+        }
+
+        $statusData = $statusResponse->json();
+        $connected = $statusData['connected'] ?? false;
+
+        // Update instance status in database
+        $instance->update([
+            'status' => $connected ? 'connected' : 'disconnected',
+            'smartphone_connected' => $statusData['smartphoneConnected'] ?? false,
+            'last_status_error' => $statusData['error'] ?? null,
+            'last_status_at' => now(),
+            'connected_at' => $connected ? ($instance->connected_at ?? now()) : null,
+        ]);
+
+        $result = [
+            'connected' => $connected,
+            'smartphoneConnected' => $statusData['smartphoneConnected'] ?? false,
+            'error' => $statusData['error'] ?? null,
+            'checkedAt' => now()->toIso8601String(),
+        ];
+
+        if ($connected) {
+            // Get device info when connected
+            try {
+                $deviceResponse = $this->client($instance)->get('/device');
+                if ($deviceResponse->successful()) {
+                    $deviceData = $deviceResponse->json();
+                    $result['phone'] = $deviceData['phone'] ?? null;
+                    $result['imgUrl'] = $deviceData['imgUrl'] ?? null;
+                    $result['deviceName'] = $deviceData['name'] ?? null;
+
+                    // Update phone in database
+                    if (!empty($deviceData['phone'])) {
+                        $instance->update(['phone_number' => $deviceData['phone']]);
+                    }
+                }
+            } catch (\Exception $e) {
+                Log::warning('Failed to get device info', ['error' => $e->getMessage()]);
+            }
+        } else {
+            // Get QR code when disconnected
+            try {
+                $qrResponse = $this->client($instance)->get('/qr-code/image');
+                if ($qrResponse->successful()) {
+                    $qrData = $qrResponse->json();
+                    // Only set qrCode if not connected response
+                    if (!isset($qrData['connected']) || $qrData['connected'] !== true) {
+                        $result['qrCode'] = $qrData['value'] ?? null;
+                    }
+                }
+            } catch (\Exception $e) {
+                Log::warning('Failed to get QR code', ['error' => $e->getMessage()]);
+            }
+        }
+
+        return $result;
     }
 
     /**
