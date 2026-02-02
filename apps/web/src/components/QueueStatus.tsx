@@ -51,8 +51,8 @@ export function QueueStatus() {
 
     useEffect(() => {
         fetchStatus();
-        // Auto-refresh every 30 seconds
-        const interval = setInterval(fetchStatus, 30000);
+        // Auto-refresh every 20 seconds
+        const interval = setInterval(fetchStatus, 20000);
         return () => clearInterval(interval);
     }, [fetchStatus]);
 

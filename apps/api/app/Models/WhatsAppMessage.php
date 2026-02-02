@@ -27,11 +27,13 @@ class WhatsAppMessage extends Model
         'idempotency_key',
         'quote_id',
         'supplier_id',
+        'sent_at',
     ];
 
     protected $casts = [
         'provider_payload' => 'array',
         'provider_response' => 'array',
+        'sent_at' => 'datetime',
     ];
 
     public function whatsappInstance(): BelongsTo
@@ -96,6 +98,7 @@ class WhatsAppMessage extends Model
             'zaap_id' => $zaapId,
             'whatsapp_message_id' => $messageId,
             'provider_response' => $response,
+            'sent_at' => now(),
         ]);
     }
 
