@@ -14,8 +14,22 @@ export interface ApiWhatsAppInstance {
 }
 
 export interface QrCodeData {
-  imageBase64: string;
+  imageBase64?: string | null;
   refreshedAt: string;
+  connected?: boolean;
+  phone?: string;
+  imgUrl?: string;
+}
+
+export interface FullStatusData {
+  connected: boolean;
+  smartphoneConnected: boolean;
+  phone?: string;
+  imgUrl?: string;
+  deviceName?: string;
+  qrCode?: string;
+  error?: string;
+  checkedAt: string;
 }
 
 export interface ConnectionStatus {
@@ -42,6 +56,7 @@ interface WhatsAppStore {
 
   // Z-API Actions
   checkStatus: (id: number) => Promise<ConnectionStatus>;
+  getFullStatus: (id: number) => Promise<FullStatusData>;
   getQrCode: (id: number) => Promise<QrCodeData>;
   getPhoneCode: (id: number, phone: string) => Promise<{ code: string; generatedAt: string }>;
   disconnect: (id: number) => Promise<void>;
@@ -130,12 +145,56 @@ export const useWhatsAppStore = create<WhatsAppStore>((set, get) => ({
     try {
       const response = await zapiApi.getQrCode(id);
       const qrData = response.data.data;
-      set({ currentQrCode: qrData, qrLoading: false });
+
+      // If already connected, update instance state
+      if (qrData.connected) {
+        set(state => ({
+          instances: state.instances.map(i =>
+            i.id === id
+              ? { ...i, status: 'connected' as const, phone_number: qrData.phone }
+              : i
+          ),
+          currentQrCode: qrData,
+          qrLoading: false,
+        }));
+      } else {
+        set({ currentQrCode: qrData, qrLoading: false });
+      }
+
       return qrData;
     } catch (error) {
       set({ qrLoading: false });
       throw error;
     }
+  },
+
+  getFullStatus: async (id) => {
+    const response = await zapiApi.getFullStatus(id);
+    const status = response.data.data;
+
+    // Update instance in store with full status data
+    set(state => ({
+      instances: state.instances.map(i =>
+        i.id === id
+          ? {
+            ...i,
+            status: status.connected ? 'connected' : 'disconnected',
+            phone_number: status.phone || i.phone_number,
+            smartphone_connected: status.smartphoneConnected,
+            last_status_error: status.error,
+            last_status_at: status.checkedAt,
+          }
+          : i
+      ),
+      // If connected, clear QR code; if not, set QR code
+      currentQrCode: status.connected
+        ? { connected: true, phone: status.phone, imgUrl: status.imgUrl, refreshedAt: status.checkedAt }
+        : status.qrCode
+          ? { connected: false, imageBase64: status.qrCode, refreshedAt: status.checkedAt }
+          : null,
+    }));
+
+    return status;
   },
 
   getPhoneCode: async (id, phone) => {

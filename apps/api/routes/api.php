@@ -58,6 +58,8 @@ Route::prefix('v1')->group(function () {
             // Instance operations
             Route::get('instances/{whatsappInstance}/status', [ZApiController::class, 'status']);
             Route::get('instances/{whatsappInstance}/qr', [ZApiController::class, 'qrCode']);
+            Route::get('instances/{whatsappInstance}/device', [ZApiController::class, 'deviceInfo']);
+            Route::get('instances/{whatsappInstance}/full-status', [ZApiController::class, 'fullStatus']);
             Route::get('instances/{whatsappInstance}/phone-code/{phone}', [ZApiController::class, 'phoneCode']);
             Route::post('instances/{whatsappInstance}/disconnect', [ZApiController::class, 'disconnect']);
             Route::put('instances/{whatsappInstance}/credentials', [ZApiController::class, 'updateCredentials']);

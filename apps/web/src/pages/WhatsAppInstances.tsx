@@ -17,6 +17,28 @@ import {
 import { useWhatsAppStore, type ApiWhatsAppInstance } from '@/stores/whatsappStore';
 import { toast } from 'sonner';
 
+// Format phone number for display
+function formatPhone(rawPhone: string): string {
+  // Remove prefix '55', if exists
+  if (rawPhone.startsWith('55')) {
+    rawPhone = rawPhone.slice(2);
+  }
+  // If 11 digits => (XX) 9XXXX-XXXX
+  if (rawPhone.length === 11) {
+    return '(' + rawPhone.slice(0, 2) + ') '
+      + rawPhone.slice(2, 3) + ' '
+      + rawPhone.slice(3, 7) + '-'
+      + rawPhone.slice(7);
+  }
+  // If 10 digits => (XX) XXXX-XXXX
+  else if (rawPhone.length === 10) {
+    return '(' + rawPhone.slice(0, 2) + ') '
+      + rawPhone.slice(2, 6) + '-'
+      + rawPhone.slice(6);
+  }
+  return rawPhone;
+}
+
 export default function WhatsAppInstances() {
   const {
     instances,
@@ -29,6 +51,7 @@ export default function WhatsAppInstances() {
     deleteInstance,
     checkStatus,
     getQrCode,
+    getFullStatus,
     disconnect,
     updateCredentials,
     sendTestMessage,
@@ -54,30 +77,24 @@ export default function WhatsAppInstances() {
     }
   }, [initialized, fetchInstances]);
 
-  // QR Code auto-refresh (every 15s, max 3 times)
+  // Status polling with getFullStatus (every 5s when modal is open)
   useEffect(() => {
-    if (!qrModalOpen || !selectedInstance || qrRefreshCount >= 3) return;
+    if (!qrModalOpen || !selectedInstance) return;
 
     const interval = setInterval(async () => {
-      if (qrRefreshCount < 3) {
-        try {
-          await getQrCode(selectedInstance.id);
-          setQrRefreshCount(prev => prev + 1);
-
-          // Check status after QR refresh
-          const status = await checkStatus(selectedInstance.id);
-          if (status.connected) {
-            setQrModalOpen(false);
-            toast.success('WhatsApp conectado com sucesso!');
-          }
-        } catch (error) {
-          console.error('Failed to refresh QR:', error);
+      try {
+        const status = await getFullStatus(selectedInstance.id);
+        if (status.connected) {
+          // Connected! Show success and keep modal open with device info
+          toast.success('WhatsApp conectado com sucesso!');
         }
+      } catch (error) {
+        console.error('Failed to check status:', error);
       }
-    }, 15000);
+    }, 5000);
 
     return () => clearInterval(interval);
-  }, [qrModalOpen, selectedInstance, qrRefreshCount, getQrCode, checkStatus]);
+  }, [qrModalOpen, selectedInstance, getFullStatus]);
 
   const handleConnect = async (instance: ApiWhatsAppInstance) => {
     setSelectedInstance(instance);
@@ -85,10 +102,15 @@ export default function WhatsAppInstances() {
     clearQrCode();
 
     try {
-      await getQrCode(instance.id);
+      // Use getFullStatus to get combined status + QR/device info
+      const status = await getFullStatus(instance.id);
       setQrModalOpen(true);
+
+      if (status.connected) {
+        toast.success('Esta instância já está conectada!');
+      }
     } catch {
-      toast.error('Erro ao obter QR Code. Configure as credenciais Z-API primeiro.');
+      toast.error('Erro ao obter status. Configure as credenciais Z-API primeiro.');
       setSelectedInstance(instance);
       setCredentialsModalOpen(true);
     }
@@ -99,11 +121,11 @@ export default function WhatsAppInstances() {
 
     setIsRefreshingQr(true);
     try {
-      await getQrCode(selectedInstance.id);
+      await getFullStatus(selectedInstance.id);
       setQrRefreshCount(0);
-      toast.success('QR Code atualizado');
+      toast.success('Status atualizado');
     } catch {
-      toast.error('Erro ao atualizar QR Code');
+      toast.error('Erro ao atualizar status');
     } finally {
       setIsRefreshingQr(false);
     }
@@ -242,8 +264,8 @@ export default function WhatsAppInstances() {
                 <div className="flex items-start justify-between">
                   <div className="flex items-start gap-3">
                     <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${instance.status === 'connected'
-                        ? 'bg-success-light text-success'
-                        : 'bg-muted text-muted-foreground'
+                      ? 'bg-success-light text-success'
+                      : 'bg-muted text-muted-foreground'
                       }`}>
                       {instance.status === 'connected' ? (
                         <Wifi className="h-5 w-5" />
@@ -324,47 +346,73 @@ export default function WhatsAppInstances() {
         )}
       </div>
 
-      {/* QR Code Modal */}
+      {/* QR Code / Connected Device Modal */}
       <Dialog open={qrModalOpen} onOpenChange={setQrModalOpen}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Conectar WhatsApp</DialogTitle>
+            <DialogTitle>
+              {currentQrCode?.connected ? 'WhatsApp Conectado!' : 'Conectar WhatsApp'}
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <p className="text-sm text-muted-foreground text-center">
-              Escaneie o QR Code abaixo com a câmera do WhatsApp
-            </p>
-
-            {/* QR Code */}
-            <div className="mx-auto flex h-48 w-48 items-center justify-center rounded-xl bg-muted overflow-hidden">
-              {qrLoading ? (
-                <Loader2 className="w-8 h-8 animate-spin text-primary" />
-              ) : currentQrCode?.imageBase64 ? (
-                <img
-                  src={`data:image/png;base64,${currentQrCode.imageBase64}`}
-                  alt="QR Code"
-                  className="w-full h-full object-contain"
-                />
-              ) : (
-                <QrCode className="w-12 h-12 text-muted-foreground" />
-              )}
-            </div>
-
-            {qrRefreshCount >= 3 ? (
-              <div className="text-center">
-                <p className="text-sm text-muted-foreground mb-2">
-                  QR Code expirou
-                </p>
-                <Button size="sm" variant="outline" onClick={handleRefreshQr} disabled={isRefreshingQr}>
-                  <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshingQr ? 'animate-spin' : ''}`} />
-                  Atualizar QR
+            {currentQrCode?.connected ? (
+              /* Connected State */
+              <>
+                <div className="flex flex-col items-center gap-4">
+                  {currentQrCode.imgUrl && (
+                    <img
+                      src={currentQrCode.imgUrl}
+                      alt="Profile"
+                      className="w-24 h-24 rounded-full animate-pulse shadow-lg border-4 border-success"
+                    />
+                  )}
+                  <div className="text-center">
+                    <p className="font-medium text-lg text-success">Conectado!</p>
+                    {currentQrCode.phone && (
+                      <p className="text-muted-foreground">
+                        {formatPhone(currentQrCode.phone)}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <Button className="w-full" onClick={() => setQrModalOpen(false)}>
+                  Fechar
                 </Button>
-              </div>
+              </>
             ) : (
-              <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                Aguardando leitura... ({qrRefreshCount + 1}/3)
-              </div>
+              /* Disconnected State - Show QR */
+              <>
+                <p className="text-sm text-muted-foreground text-center">
+                  Escaneie o QR Code abaixo com a câmera do WhatsApp
+                </p>
+
+                {/* QR Code */}
+                <div className="mx-auto flex h-48 w-48 items-center justify-center rounded-xl bg-muted overflow-hidden">
+                  {qrLoading ? (
+                    <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                  ) : currentQrCode?.imageBase64 ? (
+                    <img
+                      src={currentQrCode.imageBase64.startsWith('data:')
+                        ? currentQrCode.imageBase64
+                        : `data:image/png;base64,${currentQrCode.imageBase64}`}
+                      alt="QR Code"
+                      className="w-full h-full object-contain"
+                    />
+                  ) : (
+                    <QrCode className="w-12 h-12 text-muted-foreground" />
+                  )}
+                </div>
+
+                <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                  Aguardando leitura...
+                </div>
+
+                <Button size="sm" variant="outline" className="w-full" onClick={handleRefreshQr} disabled={isRefreshingQr}>
+                  <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshingQr ? 'animate-spin' : ''}`} />
+                  Atualizar
+                </Button>
+              </>
             )}
           </div>
         </DialogContent>

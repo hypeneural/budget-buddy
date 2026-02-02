@@ -68,7 +68,79 @@ class ZApiController extends Controller
 
             $whatsappInstance->update(['last_qr_at' => now()]);
 
+            // If already connected, get device info instead
+            if ($qrData['connected'] ?? false) {
+                $deviceData = $this->client->getDeviceInfo($whatsappInstance);
+                return response()->json([
+                    'data' => [
+                        'connected' => true,
+                        'phone' => $deviceData['phone'] ?? null,
+                        'imgUrl' => $deviceData['imgUrl'] ?? null,
+                    ],
+                ]);
+            }
+
             return response()->json(['data' => $qrData]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => [
+                    'code' => 'ZAPI_ERROR',
+                    'message' => $e->getMessage(),
+                ],
+            ], 500);
+        }
+    }
+
+    /**
+     * Get device info when connected
+     */
+    public function deviceInfo(Request $request, WhatsAppInstance $whatsappInstance): JsonResponse
+    {
+        $this->authorize('view', $whatsappInstance);
+
+        if (!$whatsappInstance->hasCredentials()) {
+            return response()->json([
+                'error' => [
+                    'code' => 'NO_CREDENTIALS',
+                    'message' => 'Instância não possui credenciais Z-API configuradas.',
+                ],
+            ], 400);
+        }
+
+        try {
+            $deviceData = $this->client->getDeviceInfo($whatsappInstance);
+
+            return response()->json(['data' => $deviceData]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => [
+                    'code' => 'ZAPI_ERROR',
+                    'message' => $e->getMessage(),
+                ],
+            ], 500);
+        }
+    }
+
+    /**
+     * Get full status: combined status + device info + QR code
+     */
+    public function fullStatus(Request $request, WhatsAppInstance $whatsappInstance): JsonResponse
+    {
+        $this->authorize('view', $whatsappInstance);
+
+        if (!$whatsappInstance->hasCredentials()) {
+            return response()->json([
+                'error' => [
+                    'code' => 'NO_CREDENTIALS',
+                    'message' => 'Instância não possui credenciais Z-API configuradas.',
+                ],
+            ], 400);
+        }
+
+        try {
+            $fullStatus = $this->client->getFullStatus($whatsappInstance);
+
+            return response()->json(['data' => $fullStatus]);
         } catch (\Exception $e) {
             return response()->json([
                 'error' => [

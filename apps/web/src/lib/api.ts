@@ -143,6 +143,14 @@ export const zapiApi = {
   getQrCode: (instanceId: number) =>
     api.get(`/whatsapp/instances/${instanceId}/qr`),
 
+  // Get device info when connected
+  getDeviceInfo: (instanceId: number) =>
+    api.get(`/whatsapp/instances/${instanceId}/device`),
+
+  // Get full status: combined status + device info + QR code
+  getFullStatus: (instanceId: number) =>
+    api.get(`/whatsapp/instances/${instanceId}/full-status`),
+
   // Get phone code for connection
   getPhoneCode: (instanceId: number, phone: string) =>
     api.get(`/whatsapp/instances/${instanceId}/phone-code/${phone}`),
