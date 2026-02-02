@@ -55,13 +55,24 @@ export const categoriesApi = {
   delete: (id: number) => api.delete(`/categories/${id}`),
 };
 
-// Cities API
+// States API (Brazilian states from IBGE)
+export const statesApi = {
+  getAll: (params?: { region?: string; search?: string }) =>
+    api.get('/states', { params }),
+  get: (id: number) => api.get(`/states/${id}`),
+};
+
+// Cities API (Brazilian municipalities from IBGE)
 export const citiesApi = {
-  getAll: () => api.get('/cities'),
+  getAll: (params?: {
+    state_id?: number;
+    uf?: string;
+    ddd?: number;
+    capitals?: boolean;
+    search?: string;
+    limit?: number;
+  }) => api.get('/cities', { params }),
   get: (id: number) => api.get(`/cities/${id}`),
-  create: (data: { name: string; state: string }) => api.post('/cities', data),
-  update: (id: number, data: { name?: string; state?: string }) => api.put(`/cities/${id}`, data),
-  delete: (id: number) => api.delete(`/cities/${id}`),
 };
 
 // Suppliers API
@@ -108,6 +119,8 @@ export const quotesApi = {
     api.post(`/quotes/${id}/close`, { winner_supplier_id: winnerSupplierId }),
   updateSupplier: (quoteId: number, supplierId: number, data: { status?: string; value?: string; notes?: string }) =>
     api.patch(`/quotes/${quoteId}/suppliers/${supplierId}`, data),
+  broadcast: (quoteId: number, data: { whatsapp_instance_id: number; supplier_ids?: number[]; custom_message?: string }) =>
+    api.post(`/quotes/${quoteId}/broadcast`, data),
 };
 
 // WhatsApp Instances API
@@ -118,4 +131,58 @@ export const whatsappApi = {
   update: (id: number, data: { name?: string; status?: string; phone_number?: string }) =>
     api.put(`/whatsapp-instances/${id}`, data),
   delete: (id: number) => api.delete(`/whatsapp-instances/${id}`),
+};
+
+// Z-API WhatsApp Operations
+export const zapiApi = {
+  // Get instance connection status
+  getStatus: (instanceId: number) =>
+    api.get(`/whatsapp/instances/${instanceId}/status`),
+
+  // Get QR code for connection
+  getQrCode: (instanceId: number) =>
+    api.get(`/whatsapp/instances/${instanceId}/qr`),
+
+  // Get phone code for connection
+  getPhoneCode: (instanceId: number, phone: string) =>
+    api.get(`/whatsapp/instances/${instanceId}/phone-code/${phone}`),
+
+  // Disconnect instance
+  disconnect: (instanceId: number) =>
+    api.post(`/whatsapp/instances/${instanceId}/disconnect`),
+
+  // Update instance credentials
+  updateCredentials: (instanceId: number, data: { instance_id: string; instance_token: string; client_token: string }) =>
+    api.put(`/whatsapp/instances/${instanceId}/credentials`, data),
+
+  // Send text message
+  sendText: (data: {
+    whatsapp_instance_id: number;
+    phone: string;
+    message: string;
+    delayMessage?: number;
+    delayTyping?: number;
+    idempotencyKey?: string;
+  }) => api.post('/whatsapp/send-text', data),
+};
+
+// Dashboard Stats API
+export const dashboardApi = {
+  getStats: async () => {
+    const [quotesRes, suppliersRes] = await Promise.all([
+      quotesApi.getAll(),
+      suppliersApi.getAll(),
+    ]);
+
+    const quotes = quotesRes.data.data || [];
+    const suppliers = suppliersRes.data.data || [];
+
+    return {
+      totalQuotes: quotes.length,
+      openQuotes: quotes.filter((q: { status: string }) => q.status === 'open').length,
+      closedQuotes: quotes.filter((q: { status: string }) => q.status === 'closed').length,
+      totalSuppliers: suppliers.length,
+      activeSuppliers: suppliers.filter((s: { is_active: boolean }) => s.is_active).length,
+    };
+  },
 };

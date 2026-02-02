@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Search, Plus, Filter, MessageCircle } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Search, Plus, Filter, MessageCircle, Loader2 } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { FloatingActionButton } from '@/components/FloatingActionButton';
 import { QuickDrawer } from '@/components/QuickDrawer';
@@ -16,40 +16,68 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { useSupplierStore } from '@/stores/supplierStore';
-import { categories, cities } from '@/data/mockData';
-import { Supplier } from '@/types';
+import { useSupplierStore, type ApiSupplier } from '@/stores/supplierStore';
 import { toast } from 'sonner';
 
 export default function SuppliersList() {
-  const { suppliers, addSupplier, updateSupplier, deleteSupplier, searchSuppliers } = useSupplierStore();
+  const {
+    suppliers,
+    categories,
+    cities,
+    loading,
+    error,
+    fetchSuppliers,
+    fetchCategoriesAndCities,
+    createSupplier,
+    updateSupplier,
+    deleteSupplier,
+  } = useSupplierStore();
 
+  const [initialized, setInitialized] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [cityFilter, setCityFilter] = useState<string>('all');
   const [showFilters, setShowFilters] = useState(false);
 
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
+  const [editingSupplier, setEditingSupplier] = useState<ApiSupplier | null>(null);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-  const [supplierToDelete, setSupplierToDelete] = useState<Supplier | null>(null);
+  const [supplierToDelete, setSupplierToDelete] = useState<ApiSupplier | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Form state
   const [formName, setFormName] = useState('');
-  const [formCategory, setFormCategory] = useState('');
-  const [formCity, setFormCity] = useState('');
+  const [formCategoryId, setFormCategoryId] = useState<string>('');
+  const [formCityId, setFormCityId] = useState<string>('');
   const [formAddress, setFormAddress] = useState('');
   const [formWhatsapp, setFormWhatsapp] = useState('');
   const [formNotes, setFormNotes] = useState('');
 
+  useEffect(() => {
+    if (!initialized) {
+      Promise.all([fetchSuppliers(), fetchCategoriesAndCities()]).then(() =>
+        setInitialized(true)
+      );
+    }
+  }, [initialized, fetchSuppliers, fetchCategoriesAndCities]);
+
   const filteredSuppliers = () => {
-    let result = searchQuery ? searchSuppliers(searchQuery) : suppliers;
+    let result = suppliers;
+
+    if (searchQuery) {
+      const lowerQuery = searchQuery.toLowerCase();
+      result = result.filter(
+        (s) =>
+          s.name.toLowerCase().includes(lowerQuery) ||
+          s.whatsapp.includes(searchQuery)
+      );
+    }
 
     if (categoryFilter !== 'all') {
-      result = result.filter((s) => s.category === categoryFilter);
+      result = result.filter((s) => s.category_id === Number(categoryFilter));
     }
     if (cityFilter !== 'all') {
-      result = result.filter((s) => s.city === cityFilter);
+      result = result.filter((s) => s.city_id === Number(cityFilter));
     }
 
     return result;
@@ -58,35 +86,35 @@ export default function SuppliersList() {
   const openNewDrawer = () => {
     setEditingSupplier(null);
     setFormName('');
-    setFormCategory('');
-    setFormCity('');
+    setFormCategoryId('');
+    setFormCityId('');
     setFormAddress('');
     setFormWhatsapp('');
     setFormNotes('');
     setDrawerOpen(true);
   };
 
-  const openEditDrawer = (supplier: Supplier) => {
+  const openEditDrawer = (supplier: ApiSupplier) => {
     setEditingSupplier(supplier);
     setFormName(supplier.name);
-    setFormCategory(supplier.category);
-    setFormCity(supplier.city);
+    setFormCategoryId(String(supplier.category_id));
+    setFormCityId(String(supplier.city_id));
     setFormAddress(supplier.address || '');
     setFormWhatsapp(supplier.whatsapp);
     setFormNotes(supplier.notes || '');
     setDrawerOpen(true);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formName.trim()) {
       toast.error('Nome é obrigatório');
       return;
     }
-    if (!formCategory) {
+    if (!formCategoryId) {
       toast.error('Categoria é obrigatória');
       return;
     }
-    if (!formCity) {
+    if (!formCityId) {
       toast.error('Cidade é obrigatória');
       return;
     }
@@ -95,37 +123,48 @@ export default function SuppliersList() {
       return;
     }
 
-    if (editingSupplier) {
-      updateSupplier(editingSupplier.id, {
-        name: formName.trim(),
-        category: formCategory,
-        city: formCity,
-        address: formAddress.trim() || undefined,
-        whatsapp: formWhatsapp.trim(),
-        notes: formNotes.trim() || undefined,
-      });
-      toast.success('Fornecedor atualizado');
-    } else {
-      addSupplier({
-        name: formName.trim(),
-        category: formCategory,
-        city: formCity,
-        address: formAddress.trim() || undefined,
-        whatsapp: formWhatsapp.trim(),
-        notes: formNotes.trim() || undefined,
-      });
-      toast.success('Fornecedor cadastrado');
+    setIsSaving(true);
+    try {
+      if (editingSupplier) {
+        await updateSupplier(editingSupplier.id, {
+          name: formName.trim(),
+          category_id: Number(formCategoryId),
+          city_id: Number(formCityId),
+          address: formAddress.trim() || undefined,
+          whatsapp: formWhatsapp.trim(),
+          notes: formNotes.trim() || undefined,
+        });
+        toast.success('Fornecedor atualizado');
+      } else {
+        await createSupplier({
+          name: formName.trim(),
+          category_id: Number(formCategoryId),
+          city_id: Number(formCityId),
+          address: formAddress.trim() || undefined,
+          whatsapp: formWhatsapp.trim(),
+          notes: formNotes.trim() || undefined,
+        });
+        toast.success('Fornecedor cadastrado');
+      }
+      setDrawerOpen(false);
+    } catch {
+      toast.error('Erro ao salvar fornecedor');
+    } finally {
+      setIsSaving(false);
     }
-
-    setDrawerOpen(false);
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (supplierToDelete) {
-      deleteSupplier(supplierToDelete.id);
-      toast.success('Fornecedor excluído');
-      setDeleteModalOpen(false);
-      setSupplierToDelete(null);
+      try {
+        await deleteSupplier(supplierToDelete.id);
+        toast.success('Fornecedor excluído');
+        setDeleteModalOpen(false);
+        setSupplierToDelete(null);
+        setDrawerOpen(false);
+      } catch {
+        toast.error('Erro ao excluir fornecedor');
+      }
     }
   };
 
@@ -136,6 +175,16 @@ export default function SuppliersList() {
   };
 
   const filtered = filteredSuppliers();
+
+  if (loading && !initialized) {
+    return (
+      <AppLayout title="Fornecedores">
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      </AppLayout>
+    );
+  }
 
   return (
     <AppLayout
@@ -173,7 +222,7 @@ export default function SuppliersList() {
               <SelectContent>
                 <SelectItem value="all">Todas categorias</SelectItem>
                 {categories.map((cat) => (
-                  <SelectItem key={cat.id} value={cat.name}>
+                  <SelectItem key={cat.id} value={String(cat.id)}>
                     {cat.name}
                   </SelectItem>
                 ))}
@@ -187,7 +236,7 @@ export default function SuppliersList() {
               <SelectContent>
                 <SelectItem value="all">Todas cidades</SelectItem>
                 {cities.map((city) => (
-                  <SelectItem key={city.id} value={city.name}>
+                  <SelectItem key={city.id} value={String(city.id)}>
                     {city.name}
                   </SelectItem>
                 ))}
@@ -218,9 +267,9 @@ export default function SuppliersList() {
                   <h3 className="font-medium text-foreground truncate">{supplier.name}</h3>
                   <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                     <span className="rounded-md bg-muted px-2 py-0.5 text-xs">
-                      {supplier.category}
+                      {supplier.category?.name || 'Sem categoria'}
                     </span>
-                    <span>{supplier.city}</span>
+                    <span>{supplier.city?.name || 'Sem cidade'}</span>
                   </div>
                 </div>
                 <button
@@ -260,13 +309,13 @@ export default function SuppliersList() {
 
           <div className="space-y-2">
             <Label>Categoria *</Label>
-            <Select value={formCategory} onValueChange={setFormCategory}>
+            <Select value={formCategoryId} onValueChange={setFormCategoryId}>
               <SelectTrigger>
                 <SelectValue placeholder="Selecione" />
               </SelectTrigger>
               <SelectContent>
                 {categories.map((cat) => (
-                  <SelectItem key={cat.id} value={cat.name}>
+                  <SelectItem key={cat.id} value={String(cat.id)}>
                     {cat.name}
                   </SelectItem>
                 ))}
@@ -276,13 +325,13 @@ export default function SuppliersList() {
 
           <div className="space-y-2">
             <Label>Cidade *</Label>
-            <Select value={formCity} onValueChange={setFormCity}>
+            <Select value={formCityId} onValueChange={setFormCityId}>
               <SelectTrigger>
                 <SelectValue placeholder="Selecione" />
               </SelectTrigger>
               <SelectContent>
                 {cities.map((city) => (
-                  <SelectItem key={city.id} value={city.name}>
+                  <SelectItem key={city.id} value={String(city.id)}>
                     {city.name}
                   </SelectItem>
                 ))}
@@ -319,7 +368,10 @@ export default function SuppliersList() {
           </div>
 
           <div className="space-y-2 pt-4">
-            <Button className="w-full" onClick={handleSave}>
+            <Button className="w-full" onClick={handleSave} disabled={isSaving}>
+              {isSaving ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
               {editingSupplier ? 'Salvar alterações' : 'Cadastrar fornecedor'}
             </Button>
 

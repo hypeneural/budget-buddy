@@ -17,16 +17,24 @@ class QuoteSeeder extends Seeder
         $company = Company::first();
         $user = User::where('company_id', $company->id)->first();
 
+        // Map city names to IBGE IDs
+        $cityIds = [
+            'São Paulo' => 3550308,
+            'Campinas' => 3509502,
+            'Santos' => 3548500,
+            'Ribeirão Preto' => 3543402,
+            'São José dos Campos' => 3549904,
+        ];
+
         // Build lookup maps
         $categories = Category::where('company_id', $company->id)->pluck('id', 'name');
-        $cities = City::where('company_id', $company->id)->pluck('id', 'name');
         $suppliers = Supplier::where('company_id', $company->id)->get()->keyBy('name');
 
         $quotes = [
             [
                 'title' => 'Cimento e Areia',
                 'category' => 'Materiais de Construção',
-                'cities' => ['São Paulo', 'Campinas'],
+                'city_ids' => [$cityIds['São Paulo'], $cityIds['Campinas']],
                 'message' => "Preciso de orçamento para:\n- 50 sacos de cimento CP-II\n- 10m³ de areia média\n\nPrazo de entrega: 5 dias úteis\nLocal: São Paulo - Zona Sul",
                 'general_notes' => 'Urgente - obra iniciando semana que vem',
                 'status' => 'open',
@@ -48,7 +56,7 @@ class QuoteSeeder extends Seeder
             [
                 'title' => 'Fiação Elétrica',
                 'category' => 'Elétrica',
-                'cities' => ['São Paulo', 'Campinas', 'São José dos Campos'],
+                'city_ids' => [$cityIds['São Paulo'], $cityIds['Campinas'], $cityIds['São José dos Campos']],
                 'message' => "Orçamento para:\n- 500m de fio 2.5mm\n- 300m de fio 4mm\n- 100m de fio 6mm\n\nMarca: Prysmian ou equivalente",
                 'general_notes' => null,
                 'status' => 'open',
@@ -70,7 +78,7 @@ class QuoteSeeder extends Seeder
             [
                 'title' => 'Tubos e Conexões',
                 'category' => 'Hidráulica',
-                'cities' => ['São Paulo'],
+                'city_ids' => [$cityIds['São Paulo']],
                 'message' => "Preciso de:\n- 20 tubos PVC 100mm\n- 50 joelhos 90°\n- 30 tês\n- 10 registros de esfera",
                 'general_notes' => null,
                 'status' => 'open',
@@ -86,7 +94,7 @@ class QuoteSeeder extends Seeder
             [
                 'title' => 'Tinta Látex',
                 'category' => 'Tintas',
-                'cities' => ['São Paulo'],
+                'city_ids' => [$cityIds['São Paulo']],
                 'message' => 'Orçamento para 100 litros de tinta látex branco neve, marca Suvinil ou Coral.',
                 'general_notes' => null,
                 'status' => 'closed',
@@ -116,9 +124,8 @@ class QuoteSeeder extends Seeder
                 'closed_at' => $quoteData['status'] === 'closed' ? now() : null,
             ]);
 
-            // Attach cities
-            $cityIds = collect($quoteData['cities'])->map(fn($name) => $cities[$name])->toArray();
-            $quote->cities()->attach($cityIds);
+            // Attach cities using IBGE IDs
+            $quote->cities()->attach($quoteData['city_ids']);
 
             // Attach suppliers with pivot data
             foreach ($quoteData['suppliers'] as $supplierData) {

@@ -140,4 +140,78 @@ class QuoteController extends Controller
             'data' => $quote->load(['user', 'cities', 'suppliers.category', 'suppliers.city']),
         ]);
     }
+
+    public function broadcast(Request $request, Quote $quote): JsonResponse
+    {
+        $this->authorize('update', $quote);
+
+        $validated = $request->validate([
+            'whatsapp_instance_id' => 'required|exists:whatsapp_instances,id',
+            'supplier_ids' => 'nullable|array',
+            'supplier_ids.*' => 'exists:suppliers,id',
+            'custom_message' => 'nullable|string|max:4096',
+        ]);
+
+        $instance = \App\Models\WhatsAppInstance::findOrFail($validated['whatsapp_instance_id']);
+
+        if (!$instance->hasCredentials()) {
+            return response()->json([
+                'error' => [
+                    'code' => 'NO_CREDENTIALS',
+                    'message' => 'Instância WhatsApp não possui credenciais Z-API configuradas.',
+                ],
+            ], 400);
+        }
+
+        // Get suppliers to broadcast to
+        $supplierIds = $validated['supplier_ids'] ?? $quote->suppliers->pluck('id')->toArray();
+        $suppliers = \App\Models\Supplier::whereIn('id', $supplierIds)
+            ->where('company_id', $request->user()->company_id)
+            ->whereNotNull('whatsapp')
+            ->get();
+
+        if ($suppliers->isEmpty()) {
+            return response()->json([
+                'error' => [
+                    'code' => 'NO_SUPPLIERS',
+                    'message' => 'Nenhum fornecedor válido com WhatsApp encontrado.',
+                ],
+            ], 400);
+        }
+
+        // Build message
+        $message = $validated['custom_message'] ?? $quote->message;
+
+        $queued = 0;
+        foreach ($suppliers as $index => $supplier) {
+            $whatsappMessage = \App\Models\WhatsAppMessage::create([
+                'whatsapp_instance_id' => $instance->id,
+                'company_id' => $request->user()->company_id,
+                'direction' => 'outbound',
+                'phone' => $supplier->whatsapp,
+                'message' => $message,
+                'status' => 'pending',
+                'quote_id' => $quote->id,
+                'supplier_id' => $supplier->id,
+                'idempotency_key' => "quote_{$quote->id}_supplier_{$supplier->id}_" . now()->timestamp,
+                'provider_payload' => [
+                    'delayMessage' => min(15, config('zapi.default_delay_message') + $index),
+                    'delayTyping' => config('zapi.default_delay_typing'),
+                ],
+            ]);
+
+            $whatsappMessage->markAsQueued();
+            \App\Jobs\SendWhatsAppTextJob::dispatch($whatsappMessage->id)
+                ->delay(now()->addSeconds($index * 5)); // Stagger sends
+
+            $queued++;
+        }
+
+        return response()->json([
+            'data' => [
+                'queued' => $queued,
+                'total' => $suppliers->count(),
+            ],
+        ], 202);
+    }
 }

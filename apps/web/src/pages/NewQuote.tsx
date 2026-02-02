@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Send, Users } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Send, Users, Loader2 } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { MultiSelect } from '@/components/MultiSelect';
 import { Button } from '@/components/ui/button';
@@ -14,8 +14,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useQuoteStore } from '@/stores/quoteStore';
-import { useSupplierStore } from '@/stores/supplierStore';
-import { categories, cities } from '@/data/mockData';
+import { useSupplierStore, type ApiSupplier } from '@/stores/supplierStore';
 import { toast } from 'sonner';
 
 type Step = 1 | 2;
@@ -34,42 +33,61 @@ Obrigado!`;
 
 export default function NewQuote() {
   const navigate = useNavigate();
-  const { addQuote } = useQuoteStore();
-  const { getSuppliersByCategoryAndCities } = useSupplierStore();
+  const { createQuote } = useQuoteStore();
+  const { suppliers, categories, cities, fetchSuppliers, fetchCategoriesAndCities, loading } = useSupplierStore();
 
+  const [initialized, setInitialized] = useState(false);
   const [step, setStep] = useState<Step>(1);
-  
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   // Step 1
-  const [selectedCategory, setSelectedCategory] = useState<string>('');
-  const [selectedCities, setSelectedCities] = useState<string[]>([]);
-  
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
+  const [selectedCityIds, setSelectedCityIds] = useState<string[]>([]);
+
   // Step 2
   const [message, setMessage] = useState(defaultMessage);
   const [title, setTitle] = useState('');
 
-  const matchingSuppliers = selectedCategory && selectedCities.length > 0
-    ? getSuppliersByCategoryAndCities(selectedCategory, selectedCities)
-    : [];
+  useEffect(() => {
+    if (!initialized) {
+      Promise.all([fetchSuppliers(), fetchCategoriesAndCities()]).then(() =>
+        setInitialized(true)
+      );
+    }
+  }, [initialized, fetchSuppliers, fetchCategoriesAndCities]);
 
-  const cityOptions = cities.map(c => ({ value: c.name, label: c.name }));
+  // Filter suppliers by category and cities
+  const matchingSuppliers = (): ApiSupplier[] => {
+    if (!selectedCategoryId || selectedCityIds.length === 0) return [];
+
+    const catId = Number(selectedCategoryId);
+    const cityIdNums = selectedCityIds.map(Number);
+
+    return suppliers.filter(
+      s => s.category_id === catId && cityIdNums.includes(s.city_id) && s.is_active
+    );
+  };
+
+  const cityOptions = cities.map(c => ({ value: String(c.id), label: c.name }));
+  const matched = matchingSuppliers();
 
   const handleContinue = () => {
-    if (!selectedCategory) {
+    if (!selectedCategoryId) {
       toast.error('Selecione uma categoria');
       return;
     }
-    if (selectedCities.length === 0) {
+    if (selectedCityIds.length === 0) {
       toast.error('Selecione pelo menos uma cidade');
       return;
     }
-    if (matchingSuppliers.length === 0) {
+    if (matched.length === 0) {
       toast.error('Nenhum fornecedor encontrado para esta seleção');
       return;
     }
     setStep(2);
   };
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!title.trim()) {
       toast.error('Dê um título para o orçamento');
       return;
@@ -79,17 +97,33 @@ export default function NewQuote() {
       return;
     }
 
-    const newQuote = addQuote({
-      title: title.trim(),
-      category: selectedCategory,
-      cities: selectedCities,
-      message: message.trim(),
-      supplierIds: matchingSuppliers.map(s => s.id),
-    });
+    setIsSubmitting(true);
+    try {
+      const newQuote = await createQuote({
+        title: title.trim(),
+        message: message.trim(),
+        city_ids: selectedCityIds.map(Number),
+        supplier_ids: matched.map(s => s.id),
+      });
 
-    toast.success('Orçamento criado com sucesso!');
-    navigate(`/quotes/${newQuote.id}`);
+      toast.success('Orçamento criado com sucesso!');
+      navigate(`/quotes/${newQuote.id}`);
+    } catch {
+      toast.error('Erro ao criar orçamento');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
+
+  if (loading && !initialized) {
+    return (
+      <AppLayout title="Novo orçamento">
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      </AppLayout>
+    );
+  }
 
   return (
     <AppLayout
@@ -107,17 +141,14 @@ export default function NewQuote() {
       <div className="p-4 md:p-6 animate-fade-in">
         {/* Progress indicator */}
         <div className="mb-6 flex items-center gap-2">
-          <div className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-medium ${
-            step >= 1 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
-          }`}>
+          <div className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-medium ${step >= 1 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
+            }`}>
             1
           </div>
-          <div className={`h-1 flex-1 rounded-full ${
-            step >= 2 ? 'bg-primary' : 'bg-muted'
-          }`} />
-          <div className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-medium ${
-            step >= 2 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
-          }`}>
+          <div className={`h-1 flex-1 rounded-full ${step >= 2 ? 'bg-primary' : 'bg-muted'
+            }`} />
+          <div className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-medium ${step >= 2 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
+            }`}>
             2
           </div>
         </div>
@@ -134,13 +165,13 @@ export default function NewQuote() {
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label>Categoria</Label>
-                <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                <Select value={selectedCategoryId} onValueChange={setSelectedCategoryId}>
                   <SelectTrigger className="h-12">
                     <SelectValue placeholder="Selecione a categoria" />
                   </SelectTrigger>
                   <SelectContent>
                     {categories.map((cat) => (
-                      <SelectItem key={cat.id} value={cat.name}>
+                      <SelectItem key={cat.id} value={String(cat.id)}>
                         {cat.name}
                       </SelectItem>
                     ))}
@@ -152,19 +183,19 @@ export default function NewQuote() {
                 <Label>Cidades</Label>
                 <MultiSelect
                   options={cityOptions}
-                  value={selectedCities}
-                  onChange={setSelectedCities}
+                  value={selectedCityIds}
+                  onChange={setSelectedCityIds}
                   placeholder="Selecione as cidades"
                 />
               </div>
             </div>
 
             {/* Matching suppliers count */}
-            {selectedCategory && selectedCities.length > 0 && (
+            {selectedCategoryId && selectedCityIds.length > 0 && (
               <div className="flex items-center gap-2 rounded-xl bg-primary-light p-4 text-primary">
                 <Users className="h-5 w-5" />
                 <span className="font-medium">
-                  {matchingSuppliers.length} fornecedor{matchingSuppliers.length !== 1 && 'es'} encontrado{matchingSuppliers.length !== 1 && 's'}
+                  {matched.length} fornecedor{matched.length !== 1 && 'es'} encontrado{matched.length !== 1 && 's'}
                 </span>
               </div>
             )}
@@ -173,7 +204,7 @@ export default function NewQuote() {
               className="w-full"
               size="lg"
               onClick={handleContinue}
-              disabled={!selectedCategory || selectedCities.length === 0}
+              disabled={!selectedCategoryId || selectedCityIds.length === 0}
             >
               Continuar
               <ArrowRight className="ml-2 h-4 w-4" />
@@ -217,7 +248,7 @@ export default function NewQuote() {
             <div className="flex items-center gap-2 rounded-xl bg-info-light p-4 text-info">
               <Send className="h-5 w-5" />
               <span className="font-medium">
-                Será enviado para {matchingSuppliers.length} fornecedor{matchingSuppliers.length !== 1 && 'es'}
+                Será enviado para {matched.length} fornecedor{matched.length !== 1 && 'es'}
               </span>
             </div>
 
@@ -234,8 +265,13 @@ export default function NewQuote() {
                 size="lg"
                 className="flex-1"
                 onClick={handleSend}
+                disabled={isSubmitting}
               >
-                <Send className="mr-2 h-4 w-4" />
+                {isSubmitting ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="mr-2 h-4 w-4" />
+                )}
                 Disparar orçamento
               </Button>
             </div>

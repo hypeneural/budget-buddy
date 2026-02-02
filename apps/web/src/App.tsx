@@ -10,6 +10,7 @@ import QuotesList from "./pages/QuotesList";
 import QuoteDetail from "./pages/QuoteDetail";
 import NewQuote from "./pages/NewQuote";
 import SuppliersList from "./pages/SuppliersList";
+import { CategoriesList } from "./pages/CategoriesList";
 import WhatsAppInstances from "./pages/WhatsAppInstances";
 import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
@@ -66,6 +67,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <SuppliersList />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/categories"
+              element={
+                <ProtectedRoute>
+                  <CategoriesList />
                 </ProtectedRoute>
               }
             />

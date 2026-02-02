@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils';
-import { LayoutDashboard, FileText, Users, MessageCircle, LucideIcon } from 'lucide-react';
+import { LayoutDashboard, FileText, Users, Package, MessageCircle, LucideIcon } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 interface NavItem {
@@ -12,6 +12,7 @@ const navItems: NavItem[] = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/quotes', label: 'Orçamentos', icon: FileText },
   { path: '/suppliers', label: 'Fornecedores', icon: Users },
+  { path: '/categories', label: 'Categorias', icon: Package },
   { path: '/whatsapp', label: 'WhatsApp', icon: MessageCircle },
 ];
 

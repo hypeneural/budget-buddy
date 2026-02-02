@@ -1,27 +1,62 @@
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileText, Clock, CheckCircle2 } from 'lucide-react';
+import { FileText, Clock, CheckCircle2, Loader2 } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { CardStat } from '@/components/CardStat';
 import { StatusBadge } from '@/components/StatusBadge';
 import { FloatingActionButton } from '@/components/FloatingActionButton';
 import { ListItemClickable } from '@/components/ListItemClickable';
 import { EmptyState } from '@/components/EmptyState';
-import { useQuoteStore } from '@/stores/quoteStore';
+import { useQuoteStore, type ApiQuote } from '@/stores/quoteStore';
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { quotes, getOpenQuotes, getClosedQuotes } = useQuoteStore();
-  
+  const { quotes, loading, error, fetchQuotes, getOpenQuotes, getClosedQuotes } = useQuoteStore();
+  const [initialized, setInitialized] = useState(false);
+
+  useEffect(() => {
+    if (!initialized) {
+      fetchQuotes().then(() => setInitialized(true));
+    }
+  }, [initialized, fetchQuotes]);
+
   const openQuotes = getOpenQuotes();
   const closedToday = getClosedQuotes().filter(q => {
-    if (!q.closedAt) return false;
+    if (!q.closed_at) return false;
     const today = new Date();
-    return q.closedAt.toDateString() === today.toDateString();
+    const closedDate = new Date(q.closed_at);
+    return closedDate.toDateString() === today.toDateString();
   });
-  
+
   const waitingResponse = openQuotes.reduce((acc, q) => {
-    return acc + q.suppliers.filter(s => s.status === 'waiting').length;
+    return acc + (q.suppliers?.filter(s => s.pivot?.status === 'waiting').length || 0);
   }, 0);
+
+  if (loading && !initialized) {
+    return (
+      <AppLayout title="Dashboard">
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      </AppLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <AppLayout title="Dashboard">
+        <div className="p-4 text-center text-destructive">
+          <p>Erro ao carregar dados: {error}</p>
+          <button
+            onClick={() => fetchQuotes()}
+            className="mt-2 text-primary underline"
+          >
+            Tentar novamente
+          </button>
+        </div>
+      </AppLayout>
+    );
+  }
 
   return (
     <AppLayout title="Dashboard">
@@ -77,10 +112,12 @@ export default function Dashboard() {
             />
           ) : (
             <div className="space-y-3">
-              {openQuotes.slice(0, 5).map((quote) => {
-                const responded = quote.suppliers.filter(s => s.status !== 'waiting').length;
-                const total = quote.suppliers.length;
-                
+              {openQuotes.slice(0, 5).map((quote: ApiQuote) => {
+                const suppliers = quote.suppliers || [];
+                const responded = suppliers.filter(s => s.pivot?.status !== 'waiting').length;
+                const total = suppliers.length;
+                const cities = quote.cities?.map(c => c.name).join(', ') || '';
+
                 return (
                   <ListItemClickable
                     key={quote.id}
@@ -93,21 +130,21 @@ export default function Dashboard() {
                     <div className="space-y-1">
                       <h3 className="font-medium text-foreground">{quote.title}</h3>
                       <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                        <span>{quote.category}</span>
-                        <span>•</span>
-                        <span>{quote.cities.join(', ')}</span>
+                        <span>{cities}</span>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <div className="h-1.5 flex-1 max-w-24 rounded-full bg-muted overflow-hidden">
-                          <div
-                            className="h-full rounded-full bg-primary transition-all"
-                            style={{ width: `${(responded / total) * 100}%` }}
-                          />
+                      {total > 0 && (
+                        <div className="flex items-center gap-2">
+                          <div className="h-1.5 flex-1 max-w-24 rounded-full bg-muted overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-primary transition-all"
+                              style={{ width: `${(responded / total) * 100}%` }}
+                            />
+                          </div>
+                          <span className="text-xs text-muted-foreground">
+                            {responded}/{total} responderam
+                          </span>
                         </div>
-                        <span className="text-xs text-muted-foreground">
-                          {responded}/{total} responderam
-                        </span>
-                      </div>
+                      )}
                     </div>
                   </ListItemClickable>
                 );

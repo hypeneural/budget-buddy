@@ -14,11 +14,20 @@ class SupplierSeeder extends Seeder
     {
         $company = Company::first();
 
+        // Map city names to IBGE city IDs
+        $cityIds = [
+            'São Paulo' => 3550308,
+            'Campinas' => 3509502,
+            'Santos' => 3548500,
+            'Ribeirão Preto' => 3543402,
+            'São José dos Campos' => 3549904,
+        ];
+
         $suppliers = [
             [
                 'name' => 'Casa dos Materiais',
                 'category' => 'Materiais de Construção',
-                'city' => 'São Paulo',
+                'city_id' => $cityIds['São Paulo'],
                 'address' => 'Rua das Flores, 123',
                 'whatsapp' => '11999998888',
                 'notes' => 'Entrega rápida',
@@ -26,7 +35,7 @@ class SupplierSeeder extends Seeder
             [
                 'name' => 'Elétrica Central',
                 'category' => 'Elétrica',
-                'city' => 'Campinas',
+                'city_id' => $cityIds['Campinas'],
                 'address' => 'Av. Principal, 456',
                 'whatsapp' => '19988887777',
                 'notes' => null,
@@ -34,7 +43,7 @@ class SupplierSeeder extends Seeder
             [
                 'name' => 'HidroTech',
                 'category' => 'Hidráulica',
-                'city' => 'São Paulo',
+                'city_id' => $cityIds['São Paulo'],
                 'address' => null,
                 'whatsapp' => '11977776666',
                 'notes' => 'Melhor preço da região',
@@ -42,7 +51,7 @@ class SupplierSeeder extends Seeder
             [
                 'name' => 'Ferragens SP',
                 'category' => 'Ferramentas',
-                'city' => 'Santos',
+                'city_id' => $cityIds['Santos'],
                 'address' => 'Rua do Porto, 789',
                 'whatsapp' => '13966665555',
                 'notes' => null,
@@ -50,7 +59,7 @@ class SupplierSeeder extends Seeder
             [
                 'name' => 'Acabamentos Premium',
                 'category' => 'Acabamentos',
-                'city' => 'Ribeirão Preto',
+                'city_id' => $cityIds['Ribeirão Preto'],
                 'address' => null,
                 'whatsapp' => '16955554444',
                 'notes' => null,
@@ -58,7 +67,7 @@ class SupplierSeeder extends Seeder
             [
                 'name' => 'Tintas & Cores',
                 'category' => 'Tintas',
-                'city' => 'São Paulo',
+                'city_id' => $cityIds['São Paulo'],
                 'address' => 'Rua das Tintas, 321',
                 'whatsapp' => '11944443333',
                 'notes' => 'Frete grátis acima de R$ 500',
@@ -66,7 +75,7 @@ class SupplierSeeder extends Seeder
             [
                 'name' => 'Materiais Express',
                 'category' => 'Materiais de Construção',
-                'city' => 'Campinas',
+                'city_id' => $cityIds['Campinas'],
                 'address' => null,
                 'whatsapp' => '19933332222',
                 'notes' => null,
@@ -74,7 +83,7 @@ class SupplierSeeder extends Seeder
             [
                 'name' => 'Eletro Solutions',
                 'category' => 'Elétrica',
-                'city' => 'São José dos Campos',
+                'city_id' => $cityIds['São José dos Campos'],
                 'address' => 'Av. Tecnológica, 1000',
                 'whatsapp' => '12922221111',
                 'notes' => null,
@@ -86,14 +95,17 @@ class SupplierSeeder extends Seeder
                 ->where('name', $supplierData['category'])
                 ->first();
 
-            $city = City::where('company_id', $company->id)
-                ->where('name', $supplierData['city'])
-                ->first();
+            // Check if city exists
+            $city = City::find($supplierData['city_id']);
+            if (!$city) {
+                $this->command->warn("City not found: {$supplierData['city_id']}");
+                continue;
+            }
 
             Supplier::create([
                 'company_id' => $company->id,
                 'category_id' => $category->id,
-                'city_id' => $city->id,
+                'city_id' => $supplierData['city_id'],
                 'name' => $supplierData['name'],
                 'address' => $supplierData['address'],
                 'whatsapp' => $supplierData['whatsapp'],

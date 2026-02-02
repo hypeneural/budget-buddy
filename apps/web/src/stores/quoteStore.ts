@@ -1,42 +1,105 @@
 import { create } from 'zustand';
-import { Quote, SupplierQuote, SupplierQuoteStatus } from '@/types';
-import { quotes as initialQuotes, suppliers } from '@/data/mockData';
+import { quotesApi } from '@/lib/api';
+
+// API response types
+export interface ApiSupplier {
+  id: number;
+  name: string;
+  whatsapp: string;
+  address?: string;
+  notes?: string;
+  is_active: boolean;
+  category_id: number;
+  city_id: number;
+  category?: { id: number; name: string; icon?: string };
+  city?: { id: number; name: string; state: string };
+  pivot?: {
+    status: 'waiting' | 'responded' | 'winner';
+    value?: string;
+    notes?: string;
+    responded_at?: string;
+  };
+}
+
+export interface ApiQuote {
+  id: number;
+  title: string;
+  message: string;
+  general_notes?: string;
+  status: 'open' | 'closed';
+  created_at: string;
+  closed_at?: string;
+  winner_supplier_id?: number;
+  user?: { id: number; name: string; email: string };
+  cities?: { id: number; name: string; state: string }[];
+  suppliers?: ApiSupplier[];
+  winner_supplier?: ApiSupplier;
+}
 
 interface QuoteStore {
-  quotes: Quote[];
-  
+  quotes: ApiQuote[];
+  loading: boolean;
+  error: string | null;
+
   // Actions
-  addQuote: (quote: Omit<Quote, 'id' | 'createdAt' | 'status' | 'suppliers'> & { supplierIds: string[] }) => Quote;
-  updateQuote: (id: string, updates: Partial<Quote>) => void;
-  updateSupplierQuote: (quoteId: string, supplierId: string, updates: Partial<SupplierQuote>) => void;
-  closeQuote: (quoteId: string, winnerId: string) => void;
-  getQuoteById: (id: string) => Quote | undefined;
-  getOpenQuotes: () => Quote[];
-  getClosedQuotes: () => Quote[];
+  fetchQuotes: (status?: 'open' | 'closed') => Promise<void>;
+  fetchQuoteById: (id: number) => Promise<ApiQuote | null>;
+  createQuote: (data: {
+    title: string;
+    message: string;
+    general_notes?: string;
+    city_ids: number[];
+    supplier_ids: number[];
+  }) => Promise<ApiQuote>;
+  updateQuote: (id: number, data: { title?: string; message?: string; general_notes?: string }) => Promise<void>;
+  deleteQuote: (id: number) => Promise<void>;
+  closeQuote: (id: number, winnerId: number) => Promise<void>;
+  updateSupplierQuote: (quoteId: number, supplierId: number, data: { status?: string; value?: string; notes?: string }) => Promise<void>;
+  broadcastQuote: (quoteId: number, instanceId: number, supplierIds?: number[], customMessage?: string) => Promise<{ queued: number; total: number }>;
+
+  // Getters
+  getQuoteById: (id: number) => ApiQuote | undefined;
+  getOpenQuotes: () => ApiQuote[];
+  getClosedQuotes: () => ApiQuote[];
 }
 
 export const useQuoteStore = create<QuoteStore>((set, get) => ({
-  quotes: initialQuotes,
+  quotes: [],
+  loading: false,
+  error: null,
 
-  addQuote: (quoteData) => {
-    const newQuote: Quote = {
-      id: Date.now().toString(),
-      title: quoteData.title,
-      category: quoteData.category,
-      cities: quoteData.cities,
-      message: quoteData.message,
-      generalNotes: quoteData.generalNotes,
-      status: 'open',
-      suppliers: quoteData.supplierIds.map(supplierId => {
-        const supplier = suppliers.find(s => s.id === supplierId)!;
-        return {
-          supplierId,
-          supplier,
-          status: 'waiting' as SupplierQuoteStatus,
-        };
-      }),
-      createdAt: new Date(),
-    };
+  fetchQuotes: async (status) => {
+    set({ loading: true, error: null });
+    try {
+      const response = await quotesApi.getAll(status ? { status } : undefined);
+      set({ quotes: response.data.data || [], loading: false });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Failed to fetch quotes';
+      set({ error: message, loading: false });
+    }
+  },
+
+  fetchQuoteById: async (id) => {
+    try {
+      const response = await quotesApi.get(id);
+      const quote = response.data.data;
+
+      // Update in store
+      set(state => ({
+        quotes: state.quotes.some(q => q.id === id)
+          ? state.quotes.map(q => q.id === id ? quote : q)
+          : [...state.quotes, quote],
+      }));
+
+      return quote;
+    } catch {
+      return null;
+    }
+  },
+
+  createQuote: async (data) => {
+    const response = await quotesApi.create(data);
+    const newQuote = response.data.data;
 
     set(state => ({
       quotes: [newQuote, ...state.quotes],
@@ -45,46 +108,53 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     return newQuote;
   },
 
-  updateQuote: (id, updates) => {
+  updateQuote: async (id, data) => {
+    await quotesApi.update(id, data);
+
     set(state => ({
       quotes: state.quotes.map(q =>
-        q.id === id ? { ...q, ...updates } : q
+        q.id === id ? { ...q, ...data } : q
       ),
     }));
   },
 
-  updateSupplierQuote: (quoteId, supplierId, updates) => {
+  deleteQuote: async (id) => {
+    await quotesApi.delete(id);
+
     set(state => ({
-      quotes: state.quotes.map(q => {
-        if (q.id !== quoteId) return q;
-        return {
-          ...q,
-          suppliers: q.suppliers.map(sq =>
-            sq.supplierId === supplierId
-              ? { ...sq, ...updates, respondedAt: updates.value ? new Date() : sq.respondedAt }
-              : sq
-          ),
-        };
-      }),
+      quotes: state.quotes.filter(q => q.id !== id),
     }));
   },
 
-  closeQuote: (quoteId, winnerId) => {
+  closeQuote: async (id, winnerId) => {
+    const response = await quotesApi.close(id, winnerId);
+    const updatedQuote = response.data.data;
+
     set(state => ({
-      quotes: state.quotes.map(q => {
-        if (q.id !== quoteId) return q;
-        return {
-          ...q,
-          status: 'closed',
-          closedAt: new Date(),
-          winnerId,
-          suppliers: q.suppliers.map(sq => ({
-            ...sq,
-            status: sq.supplierId === winnerId ? 'winner' : sq.status,
-          })),
-        };
-      }),
+      quotes: state.quotes.map(q =>
+        q.id === id ? updatedQuote : q
+      ),
     }));
+  },
+
+  updateSupplierQuote: async (quoteId, supplierId, data) => {
+    const response = await quotesApi.updateSupplier(quoteId, supplierId, data);
+    const updatedQuote = response.data.data;
+
+    set(state => ({
+      quotes: state.quotes.map(q =>
+        q.id === quoteId ? updatedQuote : q
+      ),
+    }));
+  },
+
+  broadcastQuote: async (quoteId, instanceId, supplierIds, customMessage) => {
+    const response = await quotesApi.broadcast(quoteId, {
+      whatsapp_instance_id: instanceId,
+      supplier_ids: supplierIds,
+      custom_message: customMessage,
+    });
+    return response.data.data;
   },
 
   getQuoteById: (id) => {

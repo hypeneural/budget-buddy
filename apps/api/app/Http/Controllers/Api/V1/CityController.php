@@ -9,62 +9,72 @@ use Illuminate\Http\Request;
 
 class CityController extends Controller
 {
+    /**
+     * List cities with optional filters.
+     */
     public function index(Request $request): JsonResponse
     {
-        $cities = City::where('company_id', $request->user()->company_id)
-            ->orderBy('name')
-            ->get();
+        $query = City::with('state:id,uf,name');
+
+        // Filter by state
+        if ($request->has('state_id')) {
+            $query->where('state_id', $request->state_id);
+        }
+
+        // Filter by UF (state abbreviation)
+        if ($request->has('uf')) {
+            $query->whereHas('state', function ($q) use ($request) {
+                $q->where('uf', strtoupper($request->uf));
+            });
+        }
+
+        // Filter by DDD
+        if ($request->has('ddd')) {
+            $query->where('ddd', $request->ddd);
+        }
+
+        // Filter capitals only
+        if ($request->boolean('capitals')) {
+            $query->where('is_capital', true);
+        }
+
+        // Search by name
+        if ($request->has('search')) {
+            $query->where('name', 'like', "%{$request->search}%");
+        }
+
+        // Limit results for autocomplete
+        $limit = $request->input('limit', 100);
+
+        $cities = $query->orderBy('name')
+            ->limit(min($limit, 500))
+            ->get()
+            ->map(function ($city) {
+                return [
+                    'id' => $city->id,
+                    'name' => $city->name,
+                    'state_id' => $city->state_id,
+                    'uf' => $city->state?->uf,
+                    'is_capital' => $city->is_capital,
+                    'ddd' => $city->ddd,
+                    'display_name' => "{$city->name} - {$city->state?->uf}",
+                ];
+            });
 
         return response()->json(['data' => $cities]);
     }
 
-    public function store(Request $request): JsonResponse
+    /**
+     * Show city details.
+     */
+    public function show(City $city): JsonResponse
     {
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'state' => 'required|string|size:2',
+        return response()->json([
+            'data' => [
+                ...$city->toArray(),
+                'state' => $city->state,
+                'display_name' => "{$city->name} - {$city->state?->uf}",
+            ],
         ]);
-
-        $city = City::create([
-            'company_id' => $request->user()->company_id,
-            'name' => $validated['name'],
-            'state' => strtoupper($validated['state']),
-        ]);
-
-        return response()->json(['data' => $city], 201);
-    }
-
-    public function show(Request $request, City $city): JsonResponse
-    {
-        $this->authorize('view', $city);
-
-        return response()->json(['data' => $city]);
-    }
-
-    public function update(Request $request, City $city): JsonResponse
-    {
-        $this->authorize('update', $city);
-
-        $validated = $request->validate([
-            'name' => 'sometimes|required|string|max:255',
-            'state' => 'sometimes|required|string|size:2',
-        ]);
-
-        if (isset($validated['state'])) {
-            $validated['state'] = strtoupper($validated['state']);
-        }
-
-        $city->update($validated);
-
-        return response()->json(['data' => $city]);
-    }
-
-    public function destroy(Request $request, City $city): JsonResponse
-    {
-        $this->authorize('delete', $city);
-
-        $city->delete();
-
-        return response()->json(null, 204);
     }
 }
