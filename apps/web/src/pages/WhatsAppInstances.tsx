@@ -4,6 +4,7 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { StatusBadge } from '@/components/StatusBadge';
 import { EmptyState } from '@/components/EmptyState';
 import { ConfirmModal } from '@/components/ConfirmModal';
+import { QueueStatus } from '@/components/QueueStatus';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -242,6 +243,9 @@ export default function WhatsAppInstances() {
             </div>
           </div>
         </div>
+
+        {/* Queue Status */}
+        <QueueStatus />
 
         {/* Instances List */}
         {instances.length === 0 ? (

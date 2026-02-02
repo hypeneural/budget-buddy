@@ -24,6 +24,9 @@ Route::prefix('v1')->group(function () {
     // Z-API Webhooks (public, verified by secret)
     Route::post('webhooks/zapi/{instanceId}', [ZApiWebhookController::class, 'handle']);
 
+    // Queue cron endpoint (public, verified by token)
+    Route::get('queue/cron', [\App\Http\Controllers\Api\V1\QueueController::class, 'cron']);
+
     // Protected routes
     Route::middleware('auth:sanctum')->group(function () {
         // Auth
@@ -42,6 +45,8 @@ Route::prefix('v1')->group(function () {
         Route::get('cities/{city}', [CityController::class, 'show']);
 
         // Suppliers
+        Route::get('suppliers/filters', [SupplierController::class, 'filters']);
+        Route::get('suppliers/cities-by-category', [SupplierController::class, 'citiesByCategory']);
         Route::apiResource('suppliers', SupplierController::class);
 
         // Quotes
@@ -66,6 +71,13 @@ Route::prefix('v1')->group(function () {
 
             // Messaging
             Route::post('send-text', [ZApiController::class, 'sendText']);
+        });
+
+        // Queue Management (for manual trigger from frontend)
+        Route::prefix('queue')->group(function () {
+            Route::get('status', [\App\Http\Controllers\Api\V1\QueueController::class, 'status']);
+            Route::post('work', [\App\Http\Controllers\Api\V1\QueueController::class, 'work']);
+            Route::post('retry', [\App\Http\Controllers\Api\V1\QueueController::class, 'retry']);
         });
     });
 });

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { suppliersApi, categoriesApi, citiesApi } from '@/lib/api';
+import { suppliersApi, categoriesApi, citiesApi, whatsappApi } from '@/lib/api';
 
 export interface ApiCategory {
   id: number;
@@ -11,6 +11,8 @@ export interface ApiCity {
   id: number;
   name: string;
   state: string;
+  uf?: string;
+  display_name?: string;
 }
 
 export interface ApiSupplier {
@@ -27,16 +29,37 @@ export interface ApiSupplier {
   created_at?: string;
 }
 
+// Filter options with count
+export interface FilterOption {
+  id: number;
+  name: string;
+  uf?: string;
+  count: number;
+}
+
+// WhatsApp instance
+export interface WhatsAppInstance {
+  id: number;
+  name: string;
+  status: string;
+  phone_number?: string;
+}
+
 interface SupplierStore {
   suppliers: ApiSupplier[];
   categories: ApiCategory[];
   cities: ApiCity[];
+  filterCategories: FilterOption[];
+  filterCities: FilterOption[];
+  whatsappInstances: WhatsAppInstance[];
   loading: boolean;
   error: string | null;
 
   // Actions
   fetchSuppliers: (params?: { category_id?: number; city_id?: number; is_active?: boolean; search?: string }) => Promise<void>;
   fetchCategoriesAndCities: () => Promise<void>;
+  fetchFilters: () => Promise<void>;
+  fetchWhatsappInstances: () => Promise<void>;
   createSupplier: (data: {
     name: string;
     category_id: number;
@@ -60,6 +83,9 @@ export const useSupplierStore = create<SupplierStore>((set, get) => ({
   suppliers: [],
   categories: [],
   cities: [],
+  filterCategories: [],
+  filterCities: [],
+  whatsappInstances: [],
   loading: false,
   error: null,
 
@@ -86,6 +112,28 @@ export const useSupplierStore = create<SupplierStore>((set, get) => ({
       });
     } catch (error) {
       console.error('Failed to fetch categories/cities:', error);
+    }
+  },
+
+  fetchFilters: async () => {
+    try {
+      const response = await suppliersApi.getFilters();
+      const data = response.data.data;
+      set({
+        filterCategories: data.categories || [],
+        filterCities: data.cities || [],
+      });
+    } catch (error) {
+      console.error('Failed to fetch filters:', error);
+    }
+  },
+
+  fetchWhatsappInstances: async () => {
+    try {
+      const response = await whatsappApi.getAll();
+      set({ whatsappInstances: response.data.data || [] });
+    } catch (error) {
+      console.error('Failed to fetch WhatsApp instances:', error);
     }
   },
 

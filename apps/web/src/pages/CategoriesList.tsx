@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Pencil, Trash2, Search, Package } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { AppLayout } from '@/components/layout/AppLayout';
@@ -23,6 +23,7 @@ import {
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
+import { IconPicker, CategoryIcon } from '@/components/IconPicker';
 import { categoriesApi } from '@/lib/api';
 
 interface Category {
@@ -160,7 +161,7 @@ export const CategoriesList = () => {
                     </div>
                 ) : filteredCategories.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-12 text-center">
-                        <Package className="mb-4 h-12 w-12 text-muted-foreground" />
+                        <CategoryIcon name="Package" className="mb-4 h-12 w-12 text-muted-foreground" />
                         <h3 className="text-lg font-medium">Nenhuma categoria encontrada</h3>
                         <p className="text-muted-foreground">
                             {searchQuery ? 'Tente outro termo de busca' : 'Crie sua primeira categoria'}
@@ -175,11 +176,7 @@ export const CategoriesList = () => {
                             >
                                 <div className="flex items-center gap-3">
                                     <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary-light text-primary">
-                                        {category.icon ? (
-                                            <span className="text-xl">{category.icon}</span>
-                                        ) : (
-                                            <Package className="h-5 w-5" />
-                                        )}
+                                        <CategoryIcon name={category.icon} className="h-5 w-5" />
                                     </div>
                                     <div className="flex-1 min-w-0">
                                         <h3 className="font-medium truncate">{category.name}</h3>
@@ -232,14 +229,12 @@ export const CategoriesList = () => {
                                 />
                             </div>
                             <div className="space-y-2">
-                                <Label htmlFor="icon">Ícone (emoji)</Label>
-                                <Input
-                                    id="icon"
+                                <Label htmlFor="icon">Ícone</Label>
+                                <IconPicker
                                     value={formData.icon}
-                                    onChange={(e) =>
-                                        setFormData({ ...formData, icon: e.target.value })
+                                    onChange={(iconName) =>
+                                        setFormData({ ...formData, icon: iconName })
                                     }
-                                    placeholder="Ex: 🧱"
                                 />
                             </div>
                         </div>

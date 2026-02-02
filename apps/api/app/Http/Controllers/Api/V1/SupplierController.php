@@ -40,6 +40,66 @@ class SupplierController extends Controller
         return response()->json(['data' => $suppliers]);
     }
 
+    /**
+     * Get filter options with only cities/categories that have suppliers
+     */
+    public function filters(Request $request): JsonResponse
+    {
+        $companyId = $request->user()->company_id;
+
+        // Get categories with supplier count
+        $categories = \DB::table('suppliers')
+            ->join('categories', 'suppliers.category_id', '=', 'categories.id')
+            ->where('suppliers.company_id', $companyId)
+            ->groupBy('categories.id', 'categories.name')
+            ->select('categories.id', 'categories.name', \DB::raw('COUNT(suppliers.id) as count'))
+            ->orderBy('categories.name')
+            ->get();
+
+        // Get cities with supplier count
+        $cities = \DB::table('suppliers')
+            ->join('cities', 'suppliers.city_id', '=', 'cities.id')
+            ->join('states', 'cities.state_id', '=', 'states.id')
+            ->where('suppliers.company_id', $companyId)
+            ->groupBy('cities.id', 'cities.name', 'states.uf')
+            ->select('cities.id', 'cities.name', 'states.uf', \DB::raw('COUNT(suppliers.id) as count'))
+            ->orderBy('cities.name')
+            ->get();
+
+        return response()->json([
+            'data' => [
+                'categories' => $categories,
+                'cities' => $cities,
+            ]
+        ]);
+    }
+
+    /**
+     * Get cities that have suppliers in a specific category
+     */
+    public function citiesByCategory(Request $request): JsonResponse
+    {
+        $request->validate([
+            'category_id' => 'required|integer|exists:categories,id',
+        ]);
+
+        $companyId = $request->user()->company_id;
+        $categoryId = $request->category_id;
+
+        $cities = \DB::table('suppliers')
+            ->join('cities', 'suppliers.city_id', '=', 'cities.id')
+            ->join('states', 'cities.state_id', '=', 'states.id')
+            ->where('suppliers.company_id', $companyId)
+            ->where('suppliers.category_id', $categoryId)
+            ->where('suppliers.is_active', true)
+            ->groupBy('cities.id', 'cities.name', 'states.uf')
+            ->select('cities.id', 'cities.name', 'states.uf', \DB::raw('COUNT(suppliers.id) as count'))
+            ->orderBy('cities.name')
+            ->get();
+
+        return response()->json(['data' => $cities]);
+    }
+
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([

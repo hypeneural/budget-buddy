@@ -80,6 +80,9 @@ export const suppliersApi = {
   getAll: (params?: { category_id?: number; city_id?: number; is_active?: boolean; search?: string }) =>
     api.get('/suppliers', { params }),
   get: (id: number) => api.get(`/suppliers/${id}`),
+  getFilters: () => api.get('/suppliers/filters'),
+  getCitiesByCategory: (categoryId: number) =>
+    api.get('/suppliers/cities-by-category', { params: { category_id: categoryId } }),
   create: (data: {
     name: string;
     category_id: number;
@@ -131,6 +134,13 @@ export const whatsappApi = {
   update: (id: number, data: { name?: string; status?: string; phone_number?: string }) =>
     api.put(`/whatsapp-instances/${id}`, data),
   delete: (id: number) => api.delete(`/whatsapp-instances/${id}`),
+};
+
+// Queue Management API
+export const queueApi = {
+  getStatus: () => api.get('/queue/status'),
+  work: (limit?: number) => api.post('/queue/work', { limit }),
+  retry: (messageId?: number) => api.post('/queue/retry', { message_id: messageId }),
 };
 
 // Z-API WhatsApp Operations

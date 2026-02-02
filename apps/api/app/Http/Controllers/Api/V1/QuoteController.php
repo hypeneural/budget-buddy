@@ -204,6 +204,12 @@ class QuoteController extends Controller
             \App\Jobs\SendWhatsAppTextJob::dispatch($whatsappMessage->id)
                 ->delay(now()->addSeconds($index * 5)); // Stagger sends
 
+            // Update quote_supplier message status
+            $quote->suppliers()->updateExistingPivot($supplier->id, [
+                'message_status' => 'queued',
+                'queued_at' => now(),
+            ]);
+
             $queued++;
         }
 

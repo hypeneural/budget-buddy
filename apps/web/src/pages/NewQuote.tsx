@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/select';
 import { useQuoteStore } from '@/stores/quoteStore';
 import { useSupplierStore, type ApiSupplier } from '@/stores/supplierStore';
+import { suppliersApi } from '@/lib/api';
 import { toast } from 'sonner';
 
 type Step = 1 | 2;
@@ -43,6 +44,8 @@ export default function NewQuote() {
   // Step 1
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
   const [selectedCityIds, setSelectedCityIds] = useState<string[]>([]);
+  const [categoryCities, setCategoryCities] = useState<{ id: number; name: string; uf: string; count: number }[]>([]);
+  const [loadingCities, setLoadingCities] = useState(false);
 
   // Step 2
   const [message, setMessage] = useState(defaultMessage);
@@ -56,6 +59,25 @@ export default function NewQuote() {
     }
   }, [initialized, fetchSuppliers, fetchCategoriesAndCities]);
 
+  // Fetch cities when category changes
+  useEffect(() => {
+    if (selectedCategoryId) {
+      setLoadingCities(true);
+      setSelectedCityIds([]); // Reset city selection
+      suppliersApi.getCitiesByCategory(Number(selectedCategoryId))
+        .then((response) => {
+          setCategoryCities(response.data.data || []);
+        })
+        .catch((error) => {
+          console.error('Failed to fetch cities by category:', error);
+          setCategoryCities([]);
+        })
+        .finally(() => setLoadingCities(false));
+    } else {
+      setCategoryCities([]);
+    }
+  }, [selectedCategoryId]);
+
   // Filter suppliers by category and cities
   const matchingSuppliers = (): ApiSupplier[] => {
     if (!selectedCategoryId || selectedCityIds.length === 0) return [];
@@ -68,7 +90,10 @@ export default function NewQuote() {
     );
   };
 
-  const cityOptions = cities.map(c => ({ value: String(c.id), label: c.name }));
+  const cityOptions = categoryCities.map(c => ({
+    value: String(c.id),
+    label: `${c.name} - ${c.uf} (${c.count})`
+  }));
   const matched = matchingSuppliers();
 
   const handleContinue = () => {

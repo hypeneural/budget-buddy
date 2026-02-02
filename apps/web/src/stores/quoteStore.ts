@@ -15,9 +15,15 @@ export interface ApiSupplier {
   city?: { id: number; name: string; state: string };
   pivot?: {
     status: 'waiting' | 'responded' | 'winner';
+    message_status: 'pending' | 'queued' | 'sent' | 'failed';
     value?: string;
     notes?: string;
     responded_at?: string;
+    queued_at?: string;
+    sent_at?: string;
+    error_message?: string;
+    zapi_message_id?: string;
+    zapi_zaap_id?: string;
   };
 }
 

@@ -123,4 +123,16 @@ return [
         'store' => env('APP_MAINTENANCE_STORE', 'database'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Queue Cron Token
+    |--------------------------------------------------------------------------
+    |
+    | This token is used to authenticate cron requests to the queue worker
+    | endpoint. Generate a secure random string and add it to your .env file.
+    |
+    */
+
+    'queue_cron_token' => env('QUEUE_CRON_TOKEN'),
+
 ];

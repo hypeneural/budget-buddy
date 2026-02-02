@@ -78,6 +78,20 @@ class SendWhatsAppTextJob implements ShouldQueue
                 $result['response'] ?? null
             );
 
+            // Update quote_supplier if this message is for a quote
+            if ($message->quote_id && $message->supplier_id) {
+                \DB::table('quote_supplier')
+                    ->where('quote_id', $message->quote_id)
+                    ->where('supplier_id', $message->supplier_id)
+                    ->update([
+                        'message_status' => 'sent',
+                        'zapi_message_id' => $result['messageId'] ?? null,
+                        'zapi_zaap_id' => $result['zaapId'] ?? null,
+                        'sent_at' => now(),
+                        'error_message' => null,
+                    ]);
+            }
+
             Log::info('SendWhatsAppTextJob: Message sent successfully', [
                 'message_id' => $this->messageId,
                 'zaap_id' => $result['zaapId'] ?? null,
@@ -91,6 +105,17 @@ class SendWhatsAppTextJob implements ShouldQueue
 
             if ($this->attempts() >= $this->tries) {
                 $message->markAsFailed($e->getMessage());
+
+                // Update quote_supplier if this message is for a quote
+                if ($message->quote_id && $message->supplier_id) {
+                    \DB::table('quote_supplier')
+                        ->where('quote_id', $message->quote_id)
+                        ->where('supplier_id', $message->supplier_id)
+                        ->update([
+                            'message_status' => 'failed',
+                            'error_message' => $e->getMessage(),
+                        ]);
+                }
             } else {
                 throw $e; // Retry
             }

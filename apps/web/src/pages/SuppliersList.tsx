@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useSupplierStore, type ApiSupplier } from '@/stores/supplierStore';
+import { CityAutocomplete, type CityOption } from '@/components/CityAutocomplete';
 import { toast } from 'sonner';
 
 export default function SuppliersList() {
@@ -24,10 +25,13 @@ export default function SuppliersList() {
     suppliers,
     categories,
     cities,
+    filterCategories,
+    filterCities,
     loading,
     error,
     fetchSuppliers,
     fetchCategoriesAndCities,
+    fetchFilters,
     createSupplier,
     updateSupplier,
     deleteSupplier,
@@ -48,18 +52,18 @@ export default function SuppliersList() {
   // Form state
   const [formName, setFormName] = useState('');
   const [formCategoryId, setFormCategoryId] = useState<string>('');
-  const [formCityId, setFormCityId] = useState<string>('');
+  const [formCity, setFormCity] = useState<CityOption | null>(null);
   const [formAddress, setFormAddress] = useState('');
   const [formWhatsapp, setFormWhatsapp] = useState('');
   const [formNotes, setFormNotes] = useState('');
 
   useEffect(() => {
     if (!initialized) {
-      Promise.all([fetchSuppliers(), fetchCategoriesAndCities()]).then(() =>
+      Promise.all([fetchSuppliers(), fetchCategoriesAndCities(), fetchFilters()]).then(() =>
         setInitialized(true)
       );
     }
-  }, [initialized, fetchSuppliers, fetchCategoriesAndCities]);
+  }, [initialized, fetchSuppliers, fetchCategoriesAndCities, fetchFilters]);
 
   const filteredSuppliers = () => {
     let result = suppliers;
@@ -87,7 +91,7 @@ export default function SuppliersList() {
     setEditingSupplier(null);
     setFormName('');
     setFormCategoryId('');
-    setFormCityId('');
+    setFormCity(null);
     setFormAddress('');
     setFormWhatsapp('');
     setFormNotes('');
@@ -98,7 +102,13 @@ export default function SuppliersList() {
     setEditingSupplier(supplier);
     setFormName(supplier.name);
     setFormCategoryId(String(supplier.category_id));
-    setFormCityId(String(supplier.city_id));
+    // Set city from supplier data
+    setFormCity(supplier.city ? {
+      id: supplier.city.id,
+      name: supplier.city.name,
+      uf: supplier.city.uf || '',
+      display_name: `${supplier.city.name} - ${supplier.city.uf || ''}`
+    } : null);
     setFormAddress(supplier.address || '');
     setFormWhatsapp(supplier.whatsapp);
     setFormNotes(supplier.notes || '');
@@ -114,7 +124,7 @@ export default function SuppliersList() {
       toast.error('Categoria é obrigatória');
       return;
     }
-    if (!formCityId) {
+    if (!formCity) {
       toast.error('Cidade é obrigatória');
       return;
     }
@@ -129,7 +139,7 @@ export default function SuppliersList() {
         await updateSupplier(editingSupplier.id, {
           name: formName.trim(),
           category_id: Number(formCategoryId),
-          city_id: Number(formCityId),
+          city_id: formCity.id,
           address: formAddress.trim() || undefined,
           whatsapp: formWhatsapp.trim(),
           notes: formNotes.trim() || undefined,
@@ -139,7 +149,7 @@ export default function SuppliersList() {
         await createSupplier({
           name: formName.trim(),
           category_id: Number(formCategoryId),
-          city_id: Number(formCityId),
+          city_id: formCity.id,
           address: formAddress.trim() || undefined,
           whatsapp: formWhatsapp.trim(),
           notes: formNotes.trim() || undefined,
@@ -147,6 +157,8 @@ export default function SuppliersList() {
         toast.success('Fornecedor cadastrado');
       }
       setDrawerOpen(false);
+      // Refresh filters after save
+      fetchFilters();
     } catch {
       toast.error('Erro ao salvar fornecedor');
     } finally {
@@ -221,9 +233,9 @@ export default function SuppliersList() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todas categorias</SelectItem>
-                {categories.map((cat) => (
+                {filterCategories.map((cat) => (
                   <SelectItem key={cat.id} value={String(cat.id)}>
-                    {cat.name}
+                    {cat.name} ({cat.count})
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -235,9 +247,9 @@ export default function SuppliersList() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todas cidades</SelectItem>
-                {cities.map((city) => (
+                {filterCities.map((city) => (
                   <SelectItem key={city.id} value={String(city.id)}>
-                    {city.name}
+                    {city.name} - {city.uf} ({city.count})
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -325,18 +337,12 @@ export default function SuppliersList() {
 
           <div className="space-y-2">
             <Label>Cidade *</Label>
-            <Select value={formCityId} onValueChange={setFormCityId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione" />
-              </SelectTrigger>
-              <SelectContent>
-                {cities.map((city) => (
-                  <SelectItem key={city.id} value={String(city.id)}>
-                    {city.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <CityAutocomplete
+              value={formCity?.id}
+              initialCity={formCity}
+              onSelect={(city) => setFormCity(city)}
+              placeholder="Buscar cidade..."
+            />
           </div>
 
           <div className="space-y-2">
